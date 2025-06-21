@@ -1,0 +1,96 @@
+{
+  "Marge Simpson": {
+    "description_keywords": [
+      "yellow skin",
+      "cartoon character",
+      "tall blue beehive hair",
+      "motherly figure",
+      "large red eyes (often depicted)",
+      "slim build"
+    ],
+    "outfit_keywords": [
+      "simple green strapless tube dress",
+      "red pearl necklace",
+      "red flat shoes"
+    ],
+    "expression_keywords": [
+      "patient smile",
+      "occasional worried look",
+      "distinctive 'hmmm' sound (though not visual)"
+    ],
+    "negative_prompt_keywords": [
+      "realistic human skin",
+      "short hair"
+    ]
+  },
+  "Gandalf the Grey": {
+    "description_keywords": [
+      "old wizard",
+      "long grey beard",
+      "wise and kind eyes",
+      "tall and slender"
+    ],
+    "outfit_keywords": [
+      "long grey robes",
+      "pointed grey hat",
+      "wooden staff",
+      "scarf (sometimes grey or blue)"
+    ],
+    "expression_keywords": [
+      "thoughtful",
+      "stern when necessary",
+      "twinkle in his eye"
+    ],
+    "negative_prompt_keywords": [
+      "short beard",
+      "modern clothing"
+    ]
+  },
+  "Spider-Man": {
+    "description_keywords": [
+      "athletic build",
+      "masked superhero",
+      "spider-like agility"
+    ],
+    "outfit_keywords": [
+      "iconic red and blue suit",
+      "web pattern",
+      "spider emblem on chest",
+      "large white eye lenses on mask"
+    ],
+    "expression_keywords": [
+      "determined (through mask)",
+      "friendly (often depicted through body language)",
+      "dynamic poses"
+    ],
+    "negative_prompt_keywords": [
+      "unmasked (unless specified)",
+      "cape",
+      "different suit colors (unless specified)"
+    ]
+  },
+  "Wonder Woman": {
+    "description_keywords": [
+      "Amazonian princess",
+      "warrior spirit",
+      "dark hair",
+      "strong and compassionate"
+    ],
+    "outfit_keywords": [
+      "red, blue, and gold armor/outfit",
+      "star-spangled elements (classic)",
+      "tiara",
+      "Lasso of Truth",
+      "indestructible bracelets"
+    ],
+    "expression_keywords": [
+      "confident",
+      "fierce in battle",
+      "caring"
+    ],
+     "negative_prompt_keywords": [
+      "meek",
+      "wearing casual clothes (unless specified)"
+    ]
+  }
+}

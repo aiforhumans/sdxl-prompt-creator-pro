@@ -2,10 +2,19 @@ import gradio as gr
 from composer.composer import PromptComposer
 from utils.lmstudio_client import LMStudioClient
 from utils.image_preview import get_placeholder_image_path
+from utils.florence2_captioner import initialize_florence_model, get_caption_for_image
+from PIL import Image as PILImage # Use aliasing to avoid conflict if gradio uses Image
 from models.prompt_schema import CinematicPrompt # To use for type hinting and structure
 import os
 
 # --- Application Setup ---
+# Initialize Florence-2 Model
+florence_initialized = initialize_florence_model()
+if florence_initialized:
+    print("Florence-2 model initialized successfully for app.")
+else:
+    print("Warning: Florence-2 model initialization failed. Image captioning will not be available.")
+
 # Initialize LMStudioClient (points to http://localhost:1234/v1 by default)
 # The README instructs to have LM Studio running at this address.
 try:
@@ -103,50 +112,107 @@ def generate_cinematic_prompt(character_name: str, enable_comfyui_preview: bool)
 # --- Gradio UI Definition ---
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("# SDXL Prompt Creator Studio PRO")
-    gr.Markdown("Generate cinematic prompts for Stable Diffusion XL from a character name using AI modules via LM Studio.")
 
-    with gr.Row():
-        with gr.Column(scale=2):
-            character_name_input = gr.Textbox(
-                label="Character Name",
-                placeholder="e.g., 'A stoic space marine', 'A whimsical forest fairy', 'Gandalf the Grey'"
+    with gr.Tabs():
+        with gr.TabItem("📝 Cinematic Prompt Generator"):
+            gr.Markdown("Generate cinematic prompts for Stable Diffusion XL from a character name or theme using AI modules via LM Studio.")
+            with gr.Row():
+                with gr.Column(scale=2):
+                    character_name_input = gr.Textbox(
+                        label="Character Name / Theme / Keywords",
+                        placeholder="e.g., 'A stoic space marine', 'Marge Simpson', 'Whimsical forest fairy with glowing mushrooms'"
+                    )
+                    enable_comfyui_checkbox = gr.Checkbox(
+                        label="Enable ComfyUI Preview (Placeholder)",
+                        value=False # Default to False
+                    )
+                    generate_button = gr.Button("🎨 Generate Cinematic Prompt", variant="primary")
+                    status_output = gr.Textbox(label="Status", interactive=False, lines=1)
+
+                with gr.Column(scale=3):
+                    gr.Markdown("### 🖼️ Preview (SDXL Output)")
+                    image_output = gr.Image(label="Generated Image Preview", value=placeholder_image, type="filepath", interactive=False, height=300)
+
+            gr.Markdown("---")
+            with gr.Accordion("📜 Generated Prompt Details", open=True):
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### Full Prompt String (for SDXL)")
+                        prompt_string_output = gr.Textbox(label="SDXL Prompt", lines=10, interactive=False, show_copy_button=True)
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### Structured Prompt (JSON)")
+                        prompt_json_output = gr.JSON(label="Structured Prompt Data")
+
+            gr.Markdown(
+                """
+                **Note:**
+                - Ensure LM Studio is running at `http://localhost:1234/v1` with a model loaded for prompt generation.
+                - ComfyUI preview is currently a placeholder.
+                """
             )
-            enable_comfyui_checkbox = gr.Checkbox(
-                label="Enable ComfyUI Preview (Placeholder)",
-                value=False # Default to False
+
+        with gr.TabItem("🖼️ Image-to-Prompt Helper (Florence-2)"):
+            gr.Markdown("Upload an image to generate a caption or tags, which can then be used as input for the Cinematic Prompt Generator.")
+
+            florence_status_message = "Florence-2 Initialized: " + ("Yes" if florence_initialized else "No - Captioning disabled.")
+            gr.Markdown(f"**Status:** {florence_status_message}")
+
+            with gr.Row():
+                with gr.Column(scale=1):
+                    uploaded_image_input = gr.Image(type="filepath", label="Upload Image", height=300)
+                    get_caption_button = gr.Button("🔍 Generate Caption/Tags from Image", disabled=not florence_initialized)
+
+                with gr.Column(scale=1):
+                    generated_caption_output = gr.Textbox(label="Generated Caption/Tags (from Florence-2)", lines=10, interactive=False, show_copy_button=True)
+                    use_caption_button = gr.Button("➡️ Use Caption as Prompt Input", disabled=not florence_initialized)
+
+            gr.Markdown(
+                """
+                **How to use:**
+                1. Upload an image.
+                2. Click "Generate Caption/Tags from Image".
+                3. Review the generated text.
+                4. Click "Use Caption as Prompt Input" to copy the text to the "Character Name / Theme / Keywords" field in the main generator tab.
+                """
             )
-            generate_button = gr.Button("🎨 Generate Cinematic Prompt", variant="primary")
-
-            status_output = gr.Textbox(label="Status", interactive=False, lines=1)
-
-        with gr.Column(scale=3):
-            gr.Markdown("### 🖼️ Preview")
-            image_output = gr.Image(label="Generated Image Preview", value=placeholder_image, type="filepath", interactive=False, height=300) # Use filepath for local images
-
-    gr.Markdown("---")
-
-    with gr.Accordion("📝 Generated Prompt Details", open=True):
-        with gr.Row():
-            with gr.Column(scale=1):
-                gr.Markdown("#### Full Prompt String (for SDXL)")
-                prompt_string_output = gr.Textbox(label="SDXL Prompt", lines=10, interactive=False, show_copy_button=True)
-            with gr.Column(scale=1):
-                gr.Markdown("#### Structured Prompt (JSON)")
-                prompt_json_output = gr.JSON(label="Structured Prompt Data",) # Removed interactive=False, JSON is not directly interactive
 
     # --- Event Handling ---
+    # For Cinematic Prompt Generator Tab
     generate_button.click(
         fn=generate_cinematic_prompt,
         inputs=[character_name_input, enable_comfyui_checkbox],
         outputs=[prompt_string_output, prompt_json_output, image_output, status_output]
     )
 
-    gr.Markdown(
-        """
-        **Note:**
-        - Ensure LM Studio is running at `http://localhost:1234/v1` with a model loaded.
-        - ComfyUI preview is currently a placeholder. Actual integration is a future step.
-        """
+    # For Image-to-Prompt Helper Tab
+    def handle_get_caption(image_filepath):
+        if not florence_initialized:
+            return "Error: Florence-2 model not initialized."
+        if image_filepath is None:
+            return "Error: Please upload an image first."
+        try:
+            pil_image = PILImage.open(image_filepath)
+            caption = get_caption_for_image(pil_image)
+            return caption
+        except Exception as e:
+            print(f"Error getting caption: {e}")
+            return f"Error: Could not generate caption. {e}"
+
+    get_caption_button.click(
+        fn=handle_get_caption,
+        inputs=[uploaded_image_input],
+        outputs=[generated_caption_output]
+    )
+
+    def handle_use_caption(caption_text):
+        # This function updates the character_name_input in the other tab.
+        # Gradio allows returning a gr.update() object to change other components.
+        return gr.update(value=caption_text)
+
+    use_caption_button.click(
+        fn=handle_use_caption,
+        inputs=[generated_caption_output],
+        outputs=[character_name_input] # Target the input textbox in the first tab
     )
 
 if __name__ == "__main__":
