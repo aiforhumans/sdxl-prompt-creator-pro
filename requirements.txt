@@ -1,3 +1,6 @@
 gradio
 pydantic
 requests
+torch
+transformers
+Pillow

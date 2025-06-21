@@ -9,28 +9,78 @@ from models.prompt_schema import (
 from utils.lmstudio_client import LMStudioClient
 
 
+import json
+import os
+from typing import Optional, List, Dict, Any
+
 class PromptComposer:
-    def __init__(self, lm_client): # lm_client should be an instance of LMStudioClient or similar
+    def __init__(self, lm_client, traits_file_path: str = "data/character_traits.json"):
         self.lm_client = lm_client
+        self.character_traits_kb: Dict[str, Any] = {}
+        self._load_character_traits(traits_file_path)
 
-    def _generate_character_visuals(self, character_name: str) -> str:
-        system_prompt = "You are an AI assistant helping describe character visuals for an image generation prompt. Focus on appearance, age, and key features."
-        user_prompt = f"Describe the character '{character_name}'."
+    def _load_character_traits(self, traits_file_path: str):
+        try:
+            # Construct path relative to this file's location if necessary,
+            # or assume traits_file_path is absolute or relative to execution dir.
+            # For simplicity, let's assume it's relative to project root for now as per plan.
+            if os.path.exists(traits_file_path):
+                with open(traits_file_path, 'r') as f:
+                    self.character_traits_kb = json.load(f)
+                print(f"Successfully loaded character traits from {traits_file_path}")
+            else:
+                print(f"Warning: Character traits file not found at {traits_file_path}. Proceeding without knowledge base.")
+        except json.JSONDecodeError:
+            print(f"Error: Could not decode JSON from {traits_file_path}. Proceeding without knowledge base.")
+            self.character_traits_kb = {}
+        except Exception as e:
+            print(f"An unexpected error occurred while loading {traits_file_path}: {e}. Proceeding without knowledge base.")
+            self.character_traits_kb = {}
+
+    def _get_known_traits(self, character_name: str) -> Optional[Dict[str, Any]]:
+        # Case-insensitive matching for character names in the knowledge base
+        for known_name, traits in self.character_traits_kb.items():
+            if known_name.lower() == character_name.lower():
+                return traits
+        return None
+
+    def _generate_character_visuals(self, character_name: str, known_traits: Optional[Dict[str, Any]] = None) -> str:
+        system_prompt = "You are an AI assistant helping describe character visuals for an image generation prompt. Focus on appearance, age, and key features. Elaborate on any provided known traits."
+        user_prompt_parts = [f"Describe the character '{character_name}'."]
+        if known_traits and "description_keywords" in known_traits:
+            keywords = ", ".join(known_traits["description_keywords"])
+            user_prompt_parts.append(f"Incorporate these known iconic traits: {keywords}.")
+        user_prompt = " ".join(user_prompt_parts)
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
-    def _generate_outfit_details(self, character_name: str, character_visuals: str) -> str:
-        system_prompt = "You are an AI assistant helping describe outfit details for a character based on their visuals for an image generation prompt."
-        user_prompt = f"Given the character '{character_name}' who looks like: '{character_visuals}', describe their outfit."
+    def _generate_outfit_details(self, character_name: str, character_visuals: str, known_traits: Optional[Dict[str, Any]] = None) -> str:
+        system_prompt = "You are an AI assistant helping describe outfit details for a character based on their visuals for an image generation prompt. Elaborate on any provided known traits."
+        user_prompt_parts = [f"Given the character '{character_name}' who looks like: '{character_visuals}', describe their outfit."]
+        if known_traits and "outfit_keywords" in known_traits:
+            keywords = ", ".join(known_traits["outfit_keywords"])
+            user_prompt_parts.append(f"Known iconic outfit elements include: {keywords}.")
+        user_prompt = " ".join(user_prompt_parts)
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
-    def _generate_character_expression(self, character_name: str, character_visuals: str) -> str:
-        system_prompt = "You are an AI assistant helping describe the facial expression or emotion of a character for an image generation prompt."
-        user_prompt = f"What is the expression of '{character_name}' who looks like: '{character_visuals}'?"
+    def _generate_character_expression(self, character_name: str, character_visuals: str, known_traits: Optional[Dict[str, Any]] = None) -> str:
+        system_prompt = "You are an AI assistant helping describe the facial expression or emotion of a character for an image generation prompt. Elaborate on any provided known traits."
+        user_prompt_parts = [f"What is the expression of '{character_name}' who looks like: '{character_visuals}'?"]
+        if known_traits and "expression_keywords" in known_traits:
+            keywords = ", ".join(known_traits["expression_keywords"])
+            user_prompt_parts.append(f"Known expressions or typical demeanor includes: {keywords}.")
+        user_prompt = " ".join(user_prompt_parts)
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
-    def _generate_environment_setting(self, character_name: str) -> str:
+    # Other _generate methods remain similar for now, but could also accept known_traits if relevant
+    # For example, environment might be influenced by a character's typical settings.
+
+    def _generate_environment_setting(self, character_name: str, known_traits: Optional[Dict[str, Any]] = None) -> str:
         system_prompt = "You are an AI assistant creating a compelling environment/setting for a character in an image generation prompt."
-        user_prompt = f"Describe a suitable setting for the character '{character_name}'."
+        user_prompt_parts = [f"Describe a suitable setting for the character '{character_name}'."]
+        if known_traits and "environment_keywords" in known_traits: # Assuming we might add this to JSON
+             keywords = ", ".join(known_traits["environment_keywords"])
+             user_prompt_parts.append(f"Consider their typical environments such as: {keywords}.")
+        user_prompt = " ".join(user_prompt_parts)
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
     def _generate_environment_mood(self, setting_description: str) -> str:
@@ -68,9 +118,13 @@ class PromptComposer:
         user_prompt = f"For lighting described as '{lighting_description}', what is its color temperature (e.g. cool, warm)?"
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
-    def _generate_artistic_genre(self, character_name: str) -> str:
+    def _generate_artistic_genre(self, character_name: str, known_traits: Optional[Dict[str, Any]] = None) -> str:
         system_prompt = "You are an AI assistant determining an artistic genre (e.g., photorealistic, fantasy art) for a character."
-        user_prompt = f"What artistic genre best fits '{character_name}'?"
+        user_prompt_parts = [f"What artistic genre best fits '{character_name}'?"]
+        if known_traits and "genre_keywords" in known_traits: # Assuming we might add this
+            keywords = ", ".join(known_traits["genre_keywords"])
+            user_prompt_parts.append(f"Consider their typical genre: {keywords}.")
+        user_prompt = " ".join(user_prompt_parts)
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
     def _generate_artistic_influences(self, genre: str) -> str:
@@ -88,18 +142,23 @@ class PromptComposer:
         user_prompt = f"Given the character '{character_description}', the setting '{setting}', and mood '{mood}', describe the overall ambiance and atmosphere."
         return self.lm_client.generate_text(system_prompt, user_prompt)
 
-
     def compose_prompt(self, character_name: str) -> CinematicPrompt:
-        # Generate components using LLM (via client)
-        char_visuals = self._generate_character_visuals(character_name)
-        char_outfit = self._generate_outfit_details(character_name, char_visuals)
-        char_expression = self._generate_character_expression(character_name, char_visuals)
+        known_traits = self._get_known_traits(character_name)
+        if known_traits:
+            print(f"Found known traits for character: {character_name}")
+        else:
+            print(f"No known traits found for character: {character_name}. Proceeding with pure LLM generation.")
 
-        env_setting = self._generate_environment_setting(character_name)
+        # Generate components using LLM (via client), now passing known_traits
+        char_visuals = self._generate_character_visuals(character_name, known_traits)
+        char_outfit = self._generate_outfit_details(character_name, char_visuals, known_traits)
+        char_expression = self._generate_character_expression(character_name, char_visuals, known_traits)
+
+        env_setting = self._generate_environment_setting(character_name, known_traits) # Pass traits here too
         env_mood = self._generate_environment_mood(env_setting)
         env_time_of_day = self._generate_time_of_day(env_setting)
 
-        art_genre = self._generate_artistic_genre(character_name)
+        art_genre = self._generate_artistic_genre(character_name, known_traits) # Pass traits here too
         art_influences = self._generate_artistic_influences(art_genre)
 
         cam_shot_type = self._generate_camera_shot_type(character_name, env_setting)
@@ -111,6 +170,12 @@ class PromptComposer:
 
         subject = self._generate_subject_focus(char_visuals, env_setting)
         ambiance = self._generate_ambiance_atmosphere(char_visuals, env_setting, env_mood)
+
+        negative_prompts_list = []
+        if known_traits and "negative_prompt_keywords" in known_traits:
+            negative_prompts_list.extend(known_traits["negative_prompt_keywords"])
+            print(f"Adding negative prompt keywords from KB: {negative_prompts_list}")
+
 
         # Assemble into Pydantic model
         prompt_data = CinematicPrompt(
@@ -141,49 +206,60 @@ class PromptComposer:
             ),
             subject_focus=subject,
             ambiance_atmosphere=ambiance,
-            # negative_prompt_elements can be added later or be fixed
+            negative_prompt_elements=negative_prompts_list # Use list from KB
         )
 
         prompt_data.generate_prompt_string() # This will populate final_prompt_string
         return prompt_data
 
 if __name__ == "__main__":
-    # Example Usage (requires a placeholder or real LM client)
-    # This will now attempt to connect to a running LM Studio instance.
+    # Example Usage
     print("Attempting to initialize LMStudioClient for composer test.")
     print("Ensure LM Studio is running at http://localhost:1234/v1 and a model is loaded.")
+
+    actual_lm_client = None
     try:
         actual_lm_client = LMStudioClient()
-        # Quick check if client can connect (optional, client handles errors internally too)
-        # This is a simplified check; proper would be a dedicated health check endpoint or a dummy call
-        # For now, we rely on the generate_text calls to show success/failure.
-        print("LMStudioClient initialized. Attempting to compose prompt...")
+        print("LMStudioClient initialized.")
     except Exception as e:
-        print(f"Failed to initialize LMStudioClient: {e}")
-        print("Composer test will likely fail or use dummy data if client is not functional.")
-        # Fallback to a dummy client if real one fails for local testing of composer structure
+        print(f"Failed to initialize LMStudioClient: {e}. Using a dummy client for composer structure test.")
         class DummyClient:
-            def generate_text(self, sp, up, max_tokens=50): return f"Dummy response for {up[:30]}"
+            def generate_text(self, system_prompt, user_prompt, max_tokens=150):
+                # Simulate some variation based on prompt
+                if "Marge Simpson" in user_prompt:
+                    if "visuals" in system_prompt: return "Marge Simpson with tall blue hair, yellow skin."
+                    if "outfit" in system_prompt: return "Wearing her iconic green dress and red pearls."
+                    if "expression" in system_prompt: return "A patient, motherly smile."
+                elif "Gandalf" in user_prompt:
+                     if "visuals" in system_prompt: return "Gandalf the Grey, an old wizard with a long grey beard."
+                     if "outfit" in system_prompt: return "Grey robes, pointed hat, and a wooden staff."
+                return f"Dummy LLM response for: {user_prompt[:50]}..."
         actual_lm_client = DummyClient()
 
-    composer = PromptComposer(lm_client=actual_lm_client)
+    # Assuming 'data/character_traits.json' is in the parent directory of 'composer'
+    # Or if script is run from project root, 'data/character_traits.json' is correct.
+    # For robustness, construct path from this script's location if needed,
+    # but current PromptComposer init also assumes 'data/character_traits.json' from root.
+    composer = PromptComposer(lm_client=actual_lm_client, traits_file_path="data/character_traits.json")
 
-    character_name = "Gandalf the Grey"
-    print(f"\nComposing prompt for: {character_name}\n")
+    characters_to_test = [
+        "Marge Simpson", # Should use knowledge base
+        "Gandalf the Grey", # Should use knowledge base
+        "A futuristic space explorer", # Should NOT use knowledge base (pure LLM)
+        "wonder woman" # Should use knowledge base (testing case insensitivity)
+    ]
 
-    structured_prompt = composer.compose_prompt(character_name)
+    for character_name in characters_to_test:
+        print(f"\n--- Composing prompt for: {character_name} ---")
+        structured_prompt = composer.compose_prompt(character_name)
 
-    print("\n--- Structured Output (Pydantic Model) ---")
-    print(structured_prompt.model_dump_json(indent=2))
+        print("\n--- Structured Output (Pydantic Model from Composer) ---")
+        # Ensure the model_dump_json is available, it's a pydantic feature.
+        # If structured_prompt can be None or not a Pydantic model, add checks.
+        if hasattr(structured_prompt, 'model_dump_json'):
+            print(structured_prompt.model_dump_json(indent=2))
+        else:
+            print("Error: structured_prompt is not a valid Pydantic model.")
 
-    print("\n--- Final Composed Prompt String ---")
-    print(structured_prompt.final_prompt_string)
-
-    # Example 2
-    character_name_2 = "Cyberpunk Detective Kaito"
-    print(f"\nComposing prompt for: {character_name_2}\n")
-    structured_prompt_2 = composer.compose_prompt(character_name_2)
-    print("\n--- Structured Output (Pydantic Model) ---")
-    print(structured_prompt_2.model_dump_json(indent=2))
-    print("\n--- Final Composed Prompt String ---")
-    print(structured_prompt_2.final_prompt_string)
+        print("\n--- Final Composed Prompt String from Composer ---")
+        print(structured_prompt.final_prompt_string if hasattr(structured_prompt, 'final_prompt_string') else "Error: No final prompt string.")
